@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using Microsoft.Extensions.Logging;
-using MediatR;
-using Albelli.Assignment.Application.DataContext;
-using Albelli.Assignment.Application.DataContext.Entities;
-using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using MediatR;
+using Albelli.Assignment.Domain.Models;
+using Albelli.Assignment.Application.DataContext;
+using DBE = Albelli.Assignment.Application.DataContext.Entities;
 
 namespace Albelli.Assignment.Application.Features
 {
@@ -15,9 +16,7 @@ namespace Albelli.Assignment.Application.Features
     {
         public class Request : IRequest<Response>
         {
-            public Guid OrderID { get; set; }
-
-            public List<Domain.Models.OrderEntry> OrderEntries { get; set; }
+            public Order Order { get; set; }
         }
 
         public class Response
@@ -38,16 +37,21 @@ namespace Albelli.Assignment.Application.Features
 
             public async Task<Response> Handle(Request request, CancellationToken token = default)
             {
+                if (request.Order?.OrderEntries == null || !request.Order.OrderEntries.Any())
+                    throw new InvalidOperationException("Order does not contain any entries");
+
+                var order = request.Order;
+
                 // Checking if the Order with supplied ID already exists in the database
                 var dbExistingOrder = await dbContext.Orders
-                    .Where(p => p.Id == request.OrderID)
+                    .Where(p => p.Id == order.OrderID)
                     .SingleOrDefaultAsync(token);
                 if (dbExistingOrder != null)
-                    throw new InvalidOperationException($"Order with ID {request.OrderID} already exists");
+                    throw new InvalidOperationException($"Order with ID {order.OrderID} already exists");
 
                 // Mapping product type codes to ProductType entries
                 var dbProductTypes = await dbContext.ProductTypes.ToArrayAsync(token);
-                var productTypesMap = request.OrderEntries
+                var productTypesMap = order.OrderEntries
                     .Select(p => new
                     {
                         Key = p.ProductType,
@@ -62,22 +66,22 @@ namespace Albelli.Assignment.Application.Features
                 if (notFoundProductCodes.Any())
                     throw new InvalidOperationException($"Product codes ({string.Join(",", notFoundProductCodes)}) not found");
 
-                var dbOrderEntries = request.OrderEntries
-                    .Select(p => new OrderEntry
+                var dbOrderEntries = order.OrderEntries
+                    .Select(p => new DBE.OrderEntry
                     {
                         Id = Guid.NewGuid(),
-                        OrderId = request.OrderID,
+                        OrderId = order.OrderID,
                         ProductType = productTypesMap[p.ProductType],
                         Quantity = p.Quantity
                     });
 
-                var binWidth = request.OrderEntries
+                var binWidth = order.OrderEntries
                     .Select(p => CalculateBinWidth(productTypesMap[p.ProductType], p.Quantity))
                     .Sum();
 
-                var dbOrder = new Order
+                var dbOrder = new DBE.Order
                 {
-                    Id = request.OrderID,
+                    Id = order.OrderID,
                     OrderEntries = new List<DataContext.Entities.OrderEntry>(dbOrderEntries),
                     MinBinWidth = binWidth
                 };
@@ -91,7 +95,7 @@ namespace Albelli.Assignment.Application.Features
                 };
             }
 
-            private decimal CalculateBinWidth(ProductType productType, int quantity)
+            private decimal CalculateBinWidth(DBE.ProductType productType, int quantity)
             {
                 return productType.WidthInBin * (((quantity - 1) / productType.MaxAmountInGroup) + 1);
             }

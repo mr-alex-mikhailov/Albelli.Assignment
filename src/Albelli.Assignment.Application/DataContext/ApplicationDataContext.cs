@@ -17,6 +17,8 @@ namespace Albelli.Assignment.Application.DataContext
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<Order>()
+                .Property(p => p.MinBinWidth).HasDefaultValue(0);
             modelBuilder.Entity<ProductType>()
                 .HasIndex(p => p.Code).IsUnique();
             modelBuilder.Entity<ProductType>()

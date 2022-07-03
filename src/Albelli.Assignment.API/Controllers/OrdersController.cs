@@ -41,8 +41,7 @@ namespace Albelli.Assignment.API.Controllers
         {
             var request = new CreateOrder.Request
             {
-                OrderID = order.OrderID,
-                OrderEntries = order.OrderEntries
+                Order = order
             };
             var response = await mediator.Send(request, token);
 
